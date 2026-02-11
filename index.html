@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Анкетирование «Өркен»</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f4f7f6; display: flex; justify-content: center; padding: 20px; user-select: none; }
+        #quiz-container { background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); max-width: 600px; width: 100%; }
+        #auth-form { display: flex; flex-direction: column; gap: 15px; }
+        input { padding: 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 1rem; }
+        .btn-start, .option-btn { cursor: pointer; border-radius: 6px; transition: 0.3s; }
+        .btn-start { background: #3498db; color: white; border: none; padding: 15px; font-weight: bold; }
+        .active { display: block; }
+        .options { margin-top: 20px; }
+        .option-btn { display: block; width: 100%; padding: 12px; margin: 8px 0; border: 1px solid #ddd; background: #fff; text-align: left; line-height: 1.4; }
+        .option-btn:hover { background: #e8f4fd; border-color: #3498db; }
+        #quiz-flow, #result, #loading, #already-passed { display: none; }
+        .thanks-box { text-align: center; padding: 40px 20px; }
+        .thanks-box h2 { color: #2c3e50; margin-bottom: 10px; }
+    </style>
+</head>
+<body oncontextmenu="return false;"> 
+
+<div id="quiz-container">
+    <div id="already-passed" class="thanks-box">
+        <h2>Доступ ограничен</h2>
+        <p>Вы уже отправляли ответы на данную анкету. Повторное прохождение невозможно.</p>
+    </div>
+
+    <div id="auth-block">
+        <h2>Регистрация</h2>
+        <p>Напишите свое полное имя без никнеймов</p>
+        <form id="auth-form">
+            <input type="text" id="user-name" placeholder="Введите ваше ФИО" required autocomplete="off">
+            <input type="text" id="user-group" placeholder="Введите вашу группу" required autocomplete="off">
+            <button type="submit" class="btn-start">Начать тест</button>
+        </form>
+    </div>
+
+    <div id="quiz-flow">
+        <h3 style="color: #7f8c8d; font-size: 0.9rem;">Вопрос <span id="current-step">1</span> из 10</h3>
+        <div id="questions-steps"></div>
+    </div>
+
+    <div id="loading">
+        <h3 style="text-align: center;">Сохранение данных...</h3>
+    </div>
+
+    <div id="result" class="thanks-box">
+        <h2 id="user-thanks-name"></h2>
+        <p>Спасибо за прохождение!</p>
+    </div>
+</div>
+
+<script>
+    // Защита клавиш
+    document.onkeydown = function(e) {
+        if(e.keyCode == 123) return false;
+        if(e.ctrlKey && (e.shiftKey && (e.keyCode == 73 || e.keyCode == 74 || e.keyCode == 67) || e.keyCode == 85)) return false;
+    };
+
+    // ПРОВЕРКА: Проходил ли пользователь тест ранее?
+    window.onload = function() {
+        if (localStorage.getItem('orken_test_done') === 'true') {
+            document.getElementById('auth-block').style.display = 'none';
+            document.getElementById('already-passed').style.display = 'block';
+        }
+    };
+
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbwMh2JxwDzqf3Snr6wQ8l-0tZJfObz05z3Z_hb0HztNSpMT6hL05EzQeRR4f30LPHGF/exec";
+
+    const questions = [
+        { q: "Где, по твоему мнению, ребенок чаще всего сталкивается с жестокимобращением?", a: ["В семье", "На улице", "В школе", "Нигде"], w: [2, 1, 1, 0] },
+        { q: "Какие у тебя отношения с родителями?", a: ["Хорошие", "Не очень", "Плохие"], w: [0, 1, 2] },
+        { q: "Какие меры наказания используют родители?", a: ["Меня не наказывают", "Запрещают друзьям", "Физические"], w: [0, 1, 3] },
+        { q: "Ты считаешь правильными слова и действия своих родителей в отношении тебя?", a: ["Да", "Иногда нет", "Нет"], w: [0, 1, 2] },
+        { q: "Бывало ли, что родители поступили с тобой так, что ты почувствовал(а) себя обиженным(ой)?", a: ["Часто", "Редко", "Никогда"], w: [2, 1, 0] },
+        { q: "Чувствуешь себя защищенным в семье?", a: ["Да, всегда", "Не совсем", "Нет"], w: [0, 1, 2] },
+        { q: "Сталкивался ли с травлей в соцсетях?", a: ["Да", "Иногда", "Нет"], w: [2, 1, 0] },
+        { q: "С какими видами насилия ты сталкивался(-ась) в школе?", a: ["Физическое", "Эмоциональное", "Нет"], w: [2, 2, 0] },
+        { q: "Кто проявлял насилие в школе?", a: ["Учителя", "Ученики", "Другие сотрудники школы", "Не сталкивался/лась"], w: [2, 1, 2, 0] },
+        { q: "Что ты сделаешь в сложной ситуации?", a: ["Попрошу помощи у родителей", "Попробую решить проблему с помощью друзей", "Схожу к директору", "Поищу советы в интернете", "Позвоню по телефону доверия", "Попробую справиться с ситуацией самостоятельно", "Обращусь к психологу"], w: [0, 1, 0, 1, 0, 1, 0] }
+    ];
+
+    let currentQuestion = 0;
+    let totalScore = 0;
+    let userData = { name: '', group: '' };
+
+    document.getElementById('auth-form').onsubmit = (e) => {
+        e.preventDefault();
+        userData.name = document.getElementById('user-name').value;
+        userData.group = document.getElementById('user-group').value;
+        document.getElementById('auth-block').style.display = 'none';
+        document.getElementById('quiz-flow').style.display = 'block';
+        renderQuestion();
+    };
+
+    function renderQuestion() {
+        const item = questions[currentQuestion];
+        document.getElementById('questions-steps').innerHTML = `
+            <div>
+                <h2>${item.q}</h2>
+                <div class="options">
+                    ${item.a.map((ans, idx) => `<button class="option-btn" onclick="nextStep(${item.w[idx]})">${ans}</button>`).join('')}
+                </div>
+            </div>`;
+        document.getElementById('current-step').innerText = currentQuestion + 1;
+    }
+
+    function nextStep(weight) {
+        totalScore += weight;
+        currentQuestion++;
+        if (currentQuestion < questions.length) renderQuestion();
+        else sendData();
+    }
+
+    async function sendData() {
+        document.getElementById('quiz-flow').style.display = 'none';
+        document.getElementById('loading').style.display = 'block';
+
+        let verdict = totalScore <= 3 ? "Безопасно" : (totalScore <= 8 ? "Риск" : "Критично");
+
+        try {
+            await fetch(WEB_APP_URL, {
+                method: 'POST',
+                mode: 'no-cors',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    name: userData.name,
+                    group: userData.group,
+                    score: totalScore,
+                    resultText: verdict
+                })
+            });
+            
+            // СТАВИМ МЕТКУ О ПРОХОЖДЕНИИ
+            localStorage.setItem('orken_test_done', 'true');
+            
+            showFinal();
+        } catch (e) {
+            showFinal(); 
+        }
+    }
+
+    function showFinal() {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('result').style.display = 'block';
+        document.getElementById('user-thanks-name').innerText = userData.name;
+    }
+</script>
+</body>
+</html>
